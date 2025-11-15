@@ -3,20 +3,24 @@
   "version": "1.0.0",
   "description": "WhatsApp bulk messaging backend server",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
     "dev": "NODE_ENV=development node server.js",
+    "postinstall": "npx puppeteer install chrome",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["whatsapp", "bulk-messaging", "websocket"],
   "author": "MWASMWAURA WEB SOLUTIONS - James Mwaura for CCA",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@wppconnect-team/wppconnect": "^1.37.6",
     "express": "^5.1.0",
     "uuid": "^13.0.0",
-    "ws": "^8.18.3"
- },
-"engines": {"node": ">=18.0.0"}
+    "ws": "^8.18.3",
+    "puppeteer": "^21.3.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
