@@ -156,6 +156,8 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // Cleanup session
+// Replace your cleanupSession function with this:
+
 async function cleanupSession(sessionId) {
   const session = activeSessions.get(sessionId);
   if (!session) return;
@@ -163,14 +165,37 @@ async function cleanupSession(sessionId) {
   try {
     console.log(`🧹 Cleaning up session: ${sessionId}`);
     
+    // Close WhatsApp client with timeout
     if (session.client) {
       try {
-        await session.client.close();
+        // ✅ FIX: Add timeout to prevent hanging
+        await Promise.race([
+          session.client.close(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Close timeout')), 3000)
+          )
+        ]);
+        console.log(`✅ Client closed for session: ${sessionId}`);
       } catch (error) {
-        console.log(`⚠️ Error closing client: ${error.message}`);
+        console.log(`⚠️ Error closing client (forced): ${error.message}`);
+        
+        // ✅ FIX: Try to kill the browser process directly
+        try {
+          if (session.client.page && session.client.page.browser) {
+            const browser = session.client.page.browser();
+            const process = browser.process();
+            if (process) {
+              process.kill('SIGKILL');
+              console.log(`🔪 Browser process killed for session: ${sessionId}`);
+            }
+          }
+        } catch (killError) {
+          console.log(`⚠️ Could not kill browser process: ${killError.message}`);
+        }
       }
     }
 
+    // Clean up session directory
     if (session.sessionPath && fs.existsSync(session.sessionPath)) {
       try {
         fs.rmSync(session.sessionPath, { recursive: true, force: true });
@@ -183,8 +208,13 @@ async function cleanupSession(sessionId) {
     activeSessions.delete(sessionId);
     initializingSessions.delete(sessionId);
     console.log(`✅ Session ${sessionId} cleaned up`);
+    
   } catch (error) {
     console.error(`❌ Error cleaning up session ${sessionId}:`, error);
+    
+    // ✅ FIX: Force cleanup anyway
+    activeSessions.delete(sessionId);
+    initializingSessions.delete(sessionId);
   }
 }
 
@@ -233,83 +263,106 @@ async function initializeWhatsAppSession(sessionId, ws) {
       }
     }
 
-    const client = await wppconnect.create({
-      session: sessionId,
-      tokensPath: TOKENS_BASE_PATH,
-      folderNameToken: sessionId,
-      
-      catchQR: (base64Qr, asciiQR) => {
-        console.log(`📱 QR Code generated for session: ${sessionId}`);
-        console.log(`📏 QR length: ${base64Qr?.length || 0}`);
-        
-        const currentSession = activeSessions.get(sessionId);
-        
-        if (currentSession && currentSession.ws && currentSession.ws.readyState === WebSocket.OPEN) {
-          currentSession.ws.send(JSON.stringify({
-            type: 'qr',
-            qr: base64Qr,
-            sessionId: sessionId
-          }));
-          console.log(`✅ QR sent to frontend for session: ${sessionId}`);
-        } else {
-          console.error(`❌ WebSocket not ready for session: ${sessionId}`);
-        }
-      },
-      
-      statusFind: (statusSession, session) => {
-        console.log(`📊 Session ${sessionId} status:`, statusSession);
-        sendToSession(sessionId, {
-          type: 'status',
-          message: `Status: ${statusSession}`,
-          sessionId: sessionId
-        });
+    // Replace your wppconnect.create() call with this:
 
-        if (statusSession === 'inChat' || statusSession === 'qrReadSuccess') {
-          sendToSession(sessionId, {
-            type: 'ready',
-            message: 'WhatsApp connected successfully!',
-            sessionId: sessionId
-          });
-        }
-      },
-      
-      headless: true,
-      devtools: false,
-      useChrome: false,
-      debug: false,
-      logQR: false,
-      
-      browserArgs: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--disable-extensions'
-      ],
-      
-      autoClose: 0,
-      disableWelcome: true,
-      
-      puppeteerOptions: {
-        // ✅ Use Puppeteer's detected Chrome path
-        executablePath: chromePath,
-        userDataDir: path.join(TOKENS_BASE_PATH, sessionId, 'browser-profile'),
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-software-rasterizer',
-          '--disable-extensions'
-        ]
-      }
+const client = await wppconnect.create({
+  session: sessionId,
+  tokensPath: TOKENS_BASE_PATH,
+  folderNameToken: sessionId,
+  
+  catchQR: (base64Qr, asciiQR) => {
+    console.log(`📱 QR Code generated for session: ${sessionId}`);
+    console.log(`📏 QR length: ${base64Qr?.length || 0}`);
+    
+    const currentSession = activeSessions.get(sessionId);
+    
+    if (currentSession && currentSession.ws && currentSession.ws.readyState === WebSocket.OPEN) {
+      currentSession.ws.send(JSON.stringify({
+        type: 'qr',
+        qr: base64Qr,
+        sessionId: sessionId
+      }));
+      console.log(`✅ QR sent to frontend for session: ${sessionId}`);
+    } else {
+      console.error(`❌ WebSocket not ready for session: ${sessionId}`);
+    }
+  },
+  
+  statusFind: (statusSession, session) => {
+    console.log(`📊 Session ${sessionId} status:`, statusSession);
+    sendToSession(sessionId, {
+      type: 'status',
+      message: `Status: ${statusSession}`,
+      sessionId: sessionId
     });
+
+    if (statusSession === 'inChat' || statusSession === 'qrReadSuccess') {
+      sendToSession(sessionId, {
+        type: 'ready',
+        message: 'WhatsApp connected successfully!',
+        sessionId: sessionId
+      });
+    }
+    
+    // ✅ NEW: Handle disconnection
+    if (statusSession === 'desconnectedMobile' || statusSession === 'notLogged') {
+      console.log(`⚠️ Session ${sessionId} disconnected: ${statusSession}`);
+      sendToSession(sessionId, {
+        type: 'error',
+        message: `WhatsApp disconnected: ${statusSession}`,
+        sessionId: sessionId
+      });
+    }
+  },
+  
+  headless: true,
+  devtools: false,
+  useChrome: false,
+  debug: false,
+  logQR: false,
+  
+  browserArgs: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-web-security',
+    '--disable-features=VizDisplayCompositor',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--disable-extensions'
+  ],
+  
+  // ✅ CRITICAL FIX: Don't auto-close
+  autoClose: 0,
+  
+  disableWelcome: true,
+  
+  // ✅ NEW: Add these options for better stability
+  createPathFileToken: true,
+  waitForLogin: true,
+  
+  puppeteerOptions: {
+    executablePath: chromePath,
+    userDataDir: path.join(TOKENS_BASE_PATH, sessionId, 'browser-profile'),
+    headless: true,
+    // ✅ FIX: Increase protocol timeout to prevent logout errors
+  protocolTimeout: 60000, // 60 seconds (default is 30s)
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-extensions',
+      // ✅ NEW: Add these for better stability
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding'
+    ]
+  }
+});
 
     console.log(`✅ WhatsApp client created for session: ${sessionId}`);
     initializingSessions.delete(sessionId);
@@ -360,6 +413,8 @@ async function sendMessage(sessionId, phone, message) {
 }
 
 // Logout and clear session
+// Replace your logoutSession function with this improved version:
+
 async function logoutSession(sessionId) {
   const session = activeSessions.get(sessionId);
   
@@ -371,26 +426,74 @@ async function logoutSession(sessionId) {
     console.log(`🚪 Logging out session: ${sessionId}`);
     
     if (session.client) {
-      await session.client.logout();
-      await session.client.close();
+      // ✅ FIX: Add timeout to prevent hanging
+      const logoutPromise = Promise.race([
+        // Try to logout gracefully
+        (async () => {
+          try {
+            await session.client.logout();
+            console.log(`✅ Logout successful for session: ${sessionId}`);
+          } catch (error) {
+            console.log(`⚠️ Graceful logout failed: ${error.message}`);
+          }
+        })(),
+        
+        // Timeout after 5 seconds
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Logout timeout')), 5000)
+        )
+      ]);
+
+      try {
+        await logoutPromise;
+      } catch (error) {
+        console.log(`⚠️ Logout timeout, forcing close: ${error.message}`);
+      }
+
+      // ✅ FIX: Force close the browser regardless
+      try {
+        await session.client.close();
+        console.log(`✅ Browser closed for session: ${sessionId}`);
+      } catch (error) {
+        console.log(`⚠️ Error closing browser: ${error.message}`);
+      }
     }
 
+    // Clean up session directory
     if (session.sessionPath && fs.existsSync(session.sessionPath)) {
-      fs.rmSync(session.sessionPath, { recursive: true, force: true });
-      console.log(`🗑️ Session directory cleaned: ${sessionId}`);
+      try {
+        fs.rmSync(session.sessionPath, { recursive: true, force: true });
+        console.log(`🗑️ Session directory cleaned: ${sessionId}`);
+      } catch (error) {
+        console.log(`⚠️ Could not clean session directory: ${error.message}`);
+      }
     }
 
+    // Remove from active sessions
     activeSessions.delete(sessionId);
     initializingSessions.delete(sessionId);
     
     console.log(`✅ Session ${sessionId} logged out`);
     return { success: true };
+    
   } catch (error) {
     console.error(`❌ Error logging out session ${sessionId}:`, error);
+    
+    // ✅ FIX: Even if logout fails, clean up anyway
+    activeSessions.delete(sessionId);
+    initializingSessions.delete(sessionId);
+    
+    if (session.sessionPath && fs.existsSync(session.sessionPath)) {
+      try {
+        fs.rmSync(session.sessionPath, { recursive: true, force: true });
+      } catch (e) {
+        console.log(`⚠️ Could not clean session directory: ${e.message}`);
+      }
+    }
+    
     throw error;
   }
 }
-
 // WebSocket connection handler
 wss.on('connection', async (ws) => {
   console.log('🔌 New WebSocket connection');
