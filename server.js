@@ -257,7 +257,7 @@ async function initializeWhatsAppSession(sessionId, ws) {
       try {
         console.log(`🧹 Closing existing client for session: ${sessionId}`);
         await existingSession.client.close();
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 18000));
       } catch (error) {
         console.log(`⚠️ Error closing existing client: ${error.message}`);
       }
