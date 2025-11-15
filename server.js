@@ -15,10 +15,33 @@ const PORT = process.env.PORT || 3000;
 const TOKENS_BASE_PATH = path.join(__dirname, 'sessions');
 const TOKENS_PATH = path.join(__dirname, 'tokens');
 
-// ✅ FIX: Set Chrome executable path for wppconnect/puppeteer-extra
-const chromePath = puppeteer.executablePath();
-console.log(`🔍 Chrome executable path: ${chromePath}`);
-process.env.PUPPETEER_EXECUTABLE_PATH = chromePath;
+// ✅ FIX: Use local cache directory for Chrome
+const CHROME_CACHE = path.join(__dirname, '.cache', 'puppeteer');
+let chromePath;
+
+try {
+  // Try to get Chrome path from Puppeteer
+  chromePath = puppeteer.executablePath();
+  console.log(`🔍 Chrome executable path: ${chromePath}`);
+} catch (error) {
+  console.log(`⚠️ Could not auto-detect Chrome: ${error.message}`);
+  // Fallback to manual path construction
+  const fs = require('fs');
+  const chromeDir = path.join(CHROME_CACHE, 'chrome');
+  
+  if (fs.existsSync(chromeDir)) {
+    const versions = fs.readdirSync(chromeDir);
+    if (versions.length > 0) {
+      chromePath = path.join(chromeDir, versions[0], 'chrome-linux64', 'chrome');
+      console.log(`🔍 Using fallback Chrome path: ${chromePath}`);
+    }
+  }
+}
+
+// Set environment variable for wppconnect
+if (chromePath) {
+  process.env.PUPPETEER_EXECUTABLE_PATH = chromePath;
+}
 
 // Ensure directories exist
 if (!fs.existsSync(TOKENS_BASE_PATH)) {

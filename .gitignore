@@ -3,3 +3,6 @@ sessions/
 tokens/
 .env
 *.log
+
+# Don't ignore .cache - we need Chrome to be uploaded with the build
+# .cache/
