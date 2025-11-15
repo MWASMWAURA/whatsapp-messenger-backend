@@ -297,10 +297,10 @@
                 <div class="section-title">Send Message</div>
                 <form id="messageForm">
                     <div class="form-group">
-                        <label for="phoneNumber">Phone Number (with country code, no + or spaces)</label>
+                        <label for="phone">Phone Number (with country code, no + or spaces)</label>
                         <input 
                             type="text" 
-                            id="phoneNumber" 
+                            id="phone" 
                             placeholder="e.g., 254712345678 for Kenya"
                             required
                         />
@@ -340,7 +340,14 @@
             ws = new WebSocket('ws://localhost:3000');
 
             ws.onopen = () => {
-                addLog('WebSocket connected', 'info');
+                addLog('WebSocket connected - initializing session', 'info');
+                
+                // Generate browser fingerprint and initialize session
+                const fingerprint = generateBrowserFingerprint();
+                ws.send(JSON.stringify({
+                    type: 'init',
+                    fingerprint: fingerprint
+                }));
             };
 
             ws.onmessage = (event) => {
@@ -405,7 +412,7 @@
                     document.getElementById('sendBtn').disabled = false;
                     document.getElementById('sendBtn').textContent = 'Send Message';
                     // Clear form
-                    document.getElementById('phoneNumber').value = '';
+                    document.getElementById('phone').value = '';
                     document.getElementById('message').value = '';
                     break;
                 case 'message-error':
@@ -526,10 +533,10 @@
                 return;
             }
             
-            const phoneNumber = document.getElementById('phoneNumber').value;
+            const phone = document.getElementById('phone').value;
             const message = document.getElementById('message').value;
             
-            if (!phoneNumber || !message) {
+            if (!phone || !message) {
                 addLog('Please fill in all fields', 'error');
                 return;
             }
@@ -537,14 +544,35 @@
             // Send message through WebSocket
             ws.send(JSON.stringify({
                 type: 'send-message',
-                phoneNumber: phoneNumber,
+                phone: phone,
                 message: message
             }));
             
             document.getElementById('sendBtn').disabled = true;
             document.getElementById('sendBtn').textContent = 'Sending...';
-            addLog(`Sending message to ${phoneNumber}...`, 'info');
+            addLog(`Sending message to ${phone}...`, 'info');
         });
+
+        // Generate browser fingerprint for session identification
+        function generateBrowserFingerprint() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillText('Browser fingerprint', 2, 2);
+            
+            const fingerprint = [
+                navigator.userAgent,
+                navigator.language,
+                screen.width + 'x' + screen.height,
+                new Date().getTimezoneOffset(),
+                canvas.toDataURL(),
+                navigator.hardwareConcurrency || 'unknown',
+                navigator.deviceMemory || 'unknown'
+            ].join('|');
+            
+            return btoa(fingerprint).substring(0, 32);
+        }
 
         // Initialize WebSocket connection
         connectWebSocket();
