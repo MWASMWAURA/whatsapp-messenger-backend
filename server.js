@@ -511,6 +511,21 @@ wss.on('connection', async (ws) => {
   
   let sessionId = null;
 
+  // ✅ ADD: Send ping every 30 seconds to keep connection alive
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.ping();
+      console.log(`🏓 Ping sent to session: ${sessionId || 'unknown'}`);
+    } else {
+      clearInterval(pingInterval);
+    }
+  }, 30000); // 30 seconds
+  
+  // ✅ ADD: Handle pong responses
+  ws.on('pong', () => {
+    console.log(`🏓 Pong received from session: ${sessionId || 'unknown'}`);
+  });
+
   ws.on('message', async (data) => {
     try {
       const message = JSON.parse(data);
@@ -696,6 +711,7 @@ activeSessions.set(sessionId, {
 
   ws.on('close', () => {
     console.log(`🔌 WebSocket closed for session: ${sessionId}`);
+    clearInterval(pingInterval);//Clean up ping interval
     
     if (sessionId) {
       initializingSessions.delete(sessionId);
@@ -705,6 +721,7 @@ activeSessions.set(sessionId, {
 
   ws.on('error', (error) => {
     console.error(`❌ WebSocket error for session ${sessionId}:`, error);
+    clearInterval(pingInterval); // Clean up on error
   });
 });
 
