@@ -289,30 +289,41 @@ const client = await wppconnect.create({
   },
   
   statusFind: (statusSession, session) => {
-    console.log(`📊 Session ${sessionId} status:`, statusSession);
+  console.log(`📊 Session ${sessionId} status:`, statusSession);
+  
+  // Send status update to frontend
+  sendToSession(sessionId, {
+    type: 'status',
+    message: `Status: ${statusSession}`,
+    sessionId: sessionId
+  });
+
+   // ✅ CONNECTED states - send ready message
+  if (statusSession === 'inChat' || statusSession === 'qrReadSuccess') {
     sendToSession(sessionId, {
-      type: 'status',
-      message: `Status: ${statusSession}`,
+      type: 'ready',
+      message: 'WhatsApp connected successfully!',
       sessionId: sessionId
     });
-
-    if (statusSession === 'inChat' || statusSession === 'qrReadSuccess') {
-      sendToSession(sessionId, {
-        type: 'ready',
-        message: 'WhatsApp connected successfully!',
-        sessionId: sessionId
-      });
-    }
+  }
     
-    // ✅ NEW: Handle disconnection
-    if (statusSession === 'desconnectedMobile' || statusSession === 'notLogged') {
-      console.log(`⚠️ Session ${sessionId} disconnected: ${statusSession}`);
-      sendToSession(sessionId, {
-        type: 'error',
-        message: `WhatsApp disconnected: ${statusSession}`,
-        sessionId: sessionId
-      });
-    }
+     // ⚠️ ONLY treat these as errors AFTER initial connection
+  // desconnectedMobile and notLogged are NORMAL during QR code phase
+  // Only alert if we had a previous connection
+  const sessionData = activeSessions.get(sessionId);
+  const wasConnected = sessionData && sessionData.wasConnected;
+  
+  if (wasConnected && (statusSession === 'desconnectedMobile' || statusSession === 'browserClose')) {
+    console.log(`⚠️ Session ${sessionId} lost connection: ${statusSession}`);
+    sendToSession(sessionId, {
+      type: 'disconnected',
+      message: `WhatsApp disconnected: ${statusSession}`,
+      sessionId: sessionId
+    });
+  }// ✅ Mark as connected when we reach inChat
+  if (statusSession === 'inChat' && sessionData) {
+    sessionData.wasConnected = true;
+  }
   },
   
   headless: true,
@@ -572,13 +583,15 @@ wss.on('connection', async (ws) => {
         
         console.log(`✨ Creating new session: ${sessionId}`);
         
-        activeSessions.set(sessionId, {
-          client: null,
-          ws,
-          sessionPath: null,
-          lastActivity: Date.now(),
-          fingerprint
-        });
+  
+activeSessions.set(sessionId, {
+  client: null,
+  ws,
+  sessionPath: null,
+  lastActivity: Date.now(),
+  fingerprint,
+  wasConnected: false // ✅ Track if session was ever connected
+});
         
         try {
           const result = await initializeWhatsAppSession(sessionId, ws);
