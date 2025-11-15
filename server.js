@@ -1,7 +1,7 @@
 // WhatsApp Message Sender Backend with WebSocket Support
 // Install required packages:
 // npm install @wppconnect-team/wppconnect express ws
-
+const puppeteer = require('puppeteer'); // add this near the other requires
 const wppconnect = require('@wppconnect-team/wppconnect');
 const express = require('express');
 const http = require('http');
@@ -273,7 +273,16 @@ async function initializeWhatsAppSession(sessionId, ws) {
       disableWelcome: true,
       
       puppeteerOptions: {
-        userDataDir: path.join(TOKENS_BASE_PATH, sessionId, 'browser-profile')
+        executablePath: puppeteer.executablePath(), // ✅ Force Puppeteer Chromium
+        userDataDir: path.join(TOKENS_BASE_PATH, sessionId, 'browser-profile'),
+        args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor',
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
+    ]
       }
     });
 
