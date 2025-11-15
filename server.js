@@ -733,7 +733,7 @@ async function startServer() {
     initializingSessions.clear();
     activeSessions.clear();
     
-    server.listen(PORT, () => {
+    server.listen(PORT , '0.0.0.0',() => {
       console.log('✅ SERVER STARTED');
       console.log(`🌐 Server: http://localhost:${PORT}`);
       console.log(`📁 Sessions folder: ${TOKENS_BASE_PATH}`);
