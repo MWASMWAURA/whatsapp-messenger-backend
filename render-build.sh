@@ -2,6 +2,8 @@
 # exit on error
 set -o errexit
 
-# Only install npm dependencies
+# Install npm dependencies
 npm install
 
+# Install Chromium for Puppeteer
+npx puppeteer browsers install chrome
